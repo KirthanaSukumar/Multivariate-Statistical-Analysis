@@ -1,0 +1,665 @@
+---
+title: "DiSTATIS"
+author: "Kirthana S"
+date: "06/11/2019"
+output: html_document
+---
+
+# DiSTATIS
+
+**Data Table:** DiSTATIS method is used when we have K distance matrices collected on the same set of observations.
+
+**Goal:** 
+
+* DISTATIS first evaluates the similarity between distance matrices. 
+
+* From this analysis, a compromise matrix is computed which represents the best aggregate of the original matrices. The
+  original distance matrices are then projected onto the compromise matrix.
+
+**Interpretations**
+        
+    1. Global Factor Scores
+       
+       The coordinates of the observations on the components are called factor scores and these can be used to plot maps of
+       the observations in which the observations are represented as points such that the distances in the map best reflect
+       the similarities between the observations.
+       
+    2. Partial Factor Scores
+       
+       The positions of the observations ‘as seen by’ each data set are called partial factor scores and can be also
+       represented as points in the compromise map. The average of the factor scores of all the tables gives back the
+       factor score of the compromise.  
+
+
+
+**Note:** Means of the partial factor scores helps to understand the interpretaions better.
+
+## Dataset : Music Composers Dataset 
+
+**Rows:** [composer].[pianist].[ID]
+Composers : Beethoven, Bach, Mozart
+Pianist : Richter, Arrau, Pires, Baren
+Design : color the music or compute means factor scores according to the composers or the conductors
+
+**Columns:** 37 participants 
+Design: based on music experience
+
+
+
+```{r include=FALSE}
+
+rm(list = ls())
+graphics.off()
+#devtools::install_github('HerveAbdi/DistatisR',force=TRUE)
+# devtools::install_github('HerveAbdi/R4SPISE2018')
+#install.packages("DistatisR")
+#install.packages("R4SPISE2019")
+#install.packages("wesanderson")
+
+#install.packages("dplyr")
+#library(R4SPISE2019)
+
+library(dplyr)
+library(tidyverse)
+library(ExPosition)
+library(DistatisR)
+
+library(PTCA4CATA)
+library(data4PCCAR)
+
+#install.packages("readxl")
+#install.packages("cowplot")
+library(ggcorrplot)
+library(corrplot)
+library(ggplot2)
+library(cowplot)
+# install.packages('gplots')
+library(readr)
+library(gridExtra)
+
+library(ggplotify)
+library(grid)
+
+
+# for heatmap2
+#install.packages("gplots")
+#library(gplots)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r include=FALSE}
+setwd('C:\\Users\\KIRTHANA\\Desktop\\UT dallas\\Sem3\\RM3\\DiSTATIS')
+
+Raw_Data <- read.csv('natural36_constrained_forR.csv', row.names = 1)
+Sorting_Data <- Raw_Data[-37,c(3:39)]
+Design_column <- Raw_Data[37, c(3:39)]
+Design_row <- Raw_Data[-37,c(1:2)]
+
+#creating the design variable for column
+Design_column <- ifelse(Design_column <2,"Novice",     
+                  ifelse(Design_column >1 & Design_column <8, "Medium","Expert"))
+
+
+```
+
+Setting up colours. 
+
+```{r, echo=TRUE}
+
+#color for row design variables
+col4Music<- Design_row$Music
+col4Music<-dplyr::recode(col4Music, 
+                  Bach = "skyblue", 
+                  Beet = "olivedrab1",
+                  Mozart ="maroon2") 
+
+
+col4pianist<- Design_row$Pianist
+col4pianist<-dplyr::recode(col4pianist,
+                    Arrau = "violet",
+                    Richt = "violetred",
+                    Baren = "slateblue1",
+                    Pires = "midnightblue")
+
+
+
+#color for column design variables
+novice<- Sorting_Data[c(1:17)]
+medium<- Sorting_Data[c(18:30)]
+expert<- Sorting_Data[c(31:37)]
+
+low <- 'gold'
+med <- 'tomato'
+high <- 'darkred'
+col1 <- rep(low,length(novice))
+col2 <- rep(med,length(medium))
+col3 <- rep(high, length(expert))
+
+col4col <- as.matrix(c(col1,col2,col3))
+
+
+
+#color for group means
+col4means<- gplots::col2hex(c( 'darkred','tomato','orange' ))
+
+col4Music.Means<-gplots::col2hex(c( "skyblue", "olivedrab1","maroon2"))
+
+col4pianist.Means<-as.matrix( gplots::col2hex(c( "violet","violetred","slateblue1", "midnightblue")))
+
+```
+
+## DiSTATIS Analysis
+
+Distance cube with each participant representing a matrix which forms a cube when stacked together.
+```{r, echo=TRUE}
+
+# Create distance matrices
+DistanceCube <- DistatisR::DistanceFromSort(Sorting_Data)
+
+# Run the Plain DiSTATIS analysis
+resDistatis <- DistatisR::distatis(DistanceCube)
+```
+
+Group Means in the Rv space 
+```{r echo=TRUE}
+
+# Get the factors from the Cmat analysis
+G <- resDistatis$res4Cmat$G
+participant.mean_temp<- aggregate(G, by = list(t(Design_column)), mean)
+participant.mean <- participant.mean_temp[,2:ncol(participant.mean_temp )]
+rownames(participant.mean)<- participant.mean_temp[,1]
+
+
+# Get the bootstrap estimates
+BootCube <- PTCA4CATA::Boot4Mean(G, design = t(Design_column),
+                                 niter = 100,
+                                 suppressProgressBar = TRUE)
+
+```
+
+**Looking at the data pattern**
+
+Heat Map of Rv Matrix
+
+RV is a “cosine” between “vectorized” matrices(like correlation)
+squared cosine value ranges between: 0 ≤RV ≤1 
+
+
+```{r}
+rvmatrix <- resDistatis$res4Cmat$C
+heatmap(rvmatrix, Rowv=NA,Colv = NA)
+
+```
+
+Scree Plots
+
+Rv scree plot - Depicts the homogenity amongst participants. 
+```{r, echo=TRUE}
+#Scree Plot for Rv matrix
+scree.rv <- PlotScree(ev = resDistatis$res4Cmat$eigValues,plotKaiser = TRUE,
+                      title = "RV-map: Explained Variance per Dimension")
+scree.rv
+#Scree plot for the Compromise
+
+
+scree.comp <- PlotScree(ev = resDistatis$res4Splus$eigValues,plotKaiser = TRUE,
+                         title = "Compromise: Explained Variance per Dimension")
+scree.comp
+
+```
+
+Column Factor Map :(Participants)
+
+The groups formed are based on the level of experience of the participants.
+
+The novice group, medium and expert group means tend to overlap without a significant separation.
+```{r echo=FALSE}
+
+Fj <- resDistatis$res4Cmat$G
+colnames(Fj)<- c(paste0('Dimension ',1:37))
+
+Fj.plot<-createFactorMap(Fj,
+                         axis1 = 1, axis2 = 2,
+                         title = "Participants: RVMap",
+                         col.points = col4col,
+                         col.labels = col4col)
+
+# create the labels for the dimensions of the RV map
+labels4RV <- createxyLabels.gen(lambda = resDistatis$res4Cmat$eigValues ,
+                                tau = resDistatis$res4Cmat$tau,
+                                axisName = "Dimension ")
+
+
+# Create the map from the layers
+# Here with lables and dots
+Fj.1map<- Fj.plot$zeMap + labels4RV
+# Here with colored dots only
+Fj.2map <- Fj.plot$zeMap_background + 
+                Fj.plot$zeMap_dots + 
+                labels4RV
+
+Fj.2map
+
+#------------------------------------------------------------------------------------------
+#plotting the means of the participant
+
+Design_column<-t(Design_column)
+
+grp.ind <- order(Design_column)[!duplicated(sort(Design_column))]
+grp.col <- col4col
+grp.name <- Design_column[grp.ind] # get the corresponding groups
+names(grp.col) <- grp.name
+
+#------------------------------------------------------------------------------------
+group.mean <- aggregate(Fj,
+                        by = list(Design_column),
+                        # must be a list
+                        mean
+                        )
+rownames(group.mean) <- group.mean[,1] # Use the first column as row names
+fj.mean <- group.mean[,-1] # Exclude the first column
+fj.mean
+#------------------------------------------------------------------------------------------
+fj.mean.plot <- createFactorMap(fj.mean,
+                                alpha.points = 1,
+                                display.labels = TRUE,
+                                col.points = col4means,
+                                col.labels = col4means,
+                                pch = 17,
+                                cex = 3,
+                                text.cex = 4
+                                )
+
+Fj.withMeans <- Fj.2map + labels4RV +fj.mean.plot$zeMap_dots + fj.mean.plot$zeMap_text
+
+
+Fj.withMeans 
+
+#creating confidence intervals
+
+BootCube <- PTCA4CATA::Boot4Mean(Fj, 
+                                 design = Design_column,
+                                 niter = 100,
+                                 suppressProgressBar = TRUE)
+
+
+
+# Create the ellipses using function MakeCIEllipses from package PTCA4CATA
+GraphElli <- PTCA4CATA::MakeCIEllipses(BootCube$BootCube[,1:2,],
+                                       names.of.factors = c("Dimension 1","Dimension 2"),
+                                       col = col4means, 
+                                       p.level = .95
+)
+
+# create the I-map with Observations, means and confidence intervals
+Map.J.withCI <-  Fj.withMeans +  GraphElli + labels4RV + ggtitle(" PArticipant Groups with Confidence Intervals")
+
+Map.J.withCI
+
+```
+Partial Factor scores 
+
+Compare the partial factor scores between Novice, Medium, Expert
+```{r echo=TRUE}
+F_j <- resDistatis$res4Splus$PartialF 
+alpha_j <- resDistatis$res4Cmat$alpha
+
+Group_Participant<- (Design_column)
+code4Groups <- unique(Group_Participant)
+nK <- length(code4Groups)
+
+# initialize F_K and alpha_k
+F_k <- array(0, dim = c(dim(F_j)[[1]], dim(F_j)[[2]],nK)) 
+dimnames(F_k) <- list(dimnames(F_j)[[1]],
+dimnames(F_j)[[2]], code4Groups)
+alpha_k <- rep(0, nK)
+names(alpha_k) <- code4Groups
+Fa_j <- F_j
+# A horrible loop
+for (j in 1:dim(F_j)[[3]]){ Fa_j[,,j] <- F_j[,,j] * alpha_j[j] }
+# Another horrible loop
+for (k in 1:nK){
+lindex <- Group_Participant == code4Groups[k]
+alpha_k[k] <- sum(alpha_j[lindex])
+F_k[,,k] <- (1/alpha_k[k])*apply(Fa_j[,,lindex],c(1,2),sum)
+}
+
+pFi <- F_k
+
+```
+
+
+
+
+
+Row Factor Map based on design : Music Pieces
+
+
+The group means of Bach, Mozart and Beethoven music groups are slighly separated. However their confidence intervals tend to overlap. 
+```{r row factor maps, echo=FALSE}
+
+
+Fi <- resDistatis$res4Splus$F
+#constraints4Fi <- lapply(minmaxHelper(Fi),'*',1.2)
+#colnames(Fj)<- c(paste0('Dimension ',1:37))
+
+#labels for the compromise plot
+# to get the eigen values and tau for the compromise
+
+#color4Products <- # Create color for the Products from prettyGraph
+#prettyGraphsColorSelection(n.colors = nrow(resDistatis$res4Splus$F))
+
+Fi.plot <- PTCA4CATA::createFactorMap(Fi,
+                                        constraints = minmaxHelper4Partial(Fi, pFi,  
+                                        axis1 = 1, axis2 = 2),
+                                        col.points = col4Music,
+                                        col.labels = col4Music,
+                                        axis1 = 1,
+                                        axis2 = 2,
+                                        title = 'Music Pieces Map',
+                                        alpha.points = 0.8,
+                                      display.labels = FALSE
+)
+
+labels4S <- createxyLabels.gen(lambda = resDistatis$res4Splus$eigValues,
+                                tau = resDistatis$res4Splus$tau,
+                                axisName = "Dimension ")
+
+# Plain map with color for the I-set
+Fi.1map <- Fi.plot$zeMap + labels4S 
+  
+
+#Creating means 
+
+design.music<- as.matrix(Design_row$Music)
+
+grp.ind <- order(design.music)[!duplicated(sort(design.music))]
+grp.col <- col4Music
+grp.name <- design.music[grp.ind] # get the corresponding groups
+names(grp.col) <- grp.name
+
+#------------------------------------------------------------------------------------
+Music.mean <- aggregate(Fi,
+                        by = list(design.music),
+                        # must be a list
+                        mean
+                        )
+
+
+
+rownames(Music.mean) <- Music.mean[,1] # Use the first column as row names
+fi.mean <- Music.mean[,-1] # Exclude the first column
+#fi.mean
+#------------------------------------------------------------------------------------------
+fi.mean.plot <- createFactorMap(fi.mean,
+                                alpha.points = 1,
+                                display.labels = TRUE,
+                                col.points = col4Music.Means,
+                                col.labels = col4Music.Means,
+                                pch = 17,
+                                cex = 3,
+                                text.cex = 4
+                                )
+
+Fi.withMeans <- Fi.1map + labels4S +fi.mean.plot$zeMap_dots + fi.mean.plot$zeMap_text
+
+
+Fi.withMeans 
+
+#creating confidence intervals
+
+BootCube <- PTCA4CATA::Boot4Mean(Fi, 
+                                 design = design.music,
+                                 niter = 100,
+                                 suppressProgressBar = TRUE)
+
+
+
+# Create the ellipses using function MakeCIEllipses from package PTCA4CATA
+GraphElli <- PTCA4CATA::MakeCIEllipses(BootCube$BootCube[,1:2,],
+                                       names.of.factors = c("Factor 1","Factor 2"),
+                                       col = col4Music.Means, 
+                                       p.level = .95
+)
+
+# create the I-map with Observations, means and confidence intervals
+Map.J.withCI <-  Fi.withMeans +  GraphElli + labels4S + ggtitle(" Music Pieces with Confidence Intervals")
+
+Map.J.withCI
+
+```
+
+Row Factor Map based on degsign Pianists
+
+
+The group means of Baren is significantly different from Arrau Richt and Pires whose group means tend to overlap each other.
+
+```{r echo=FALSE}
+Fi <- resDistatis$res4Splus$F
+#constraints4Fi <- lapply(minmaxHelper(Fi),'*',1.2)
+#colnames(Fj)<- c(paste0('Dimension ',1:37))
+
+#labels for the compromise plot
+# to get the eigen values and tau for the compromise
+
+#color4Products <- # Create color for the Products from prettyGraph
+#prettyGraphsColorSelection(n.colors = nrow(resDistatis$res4Splus$F))
+
+Fi2.plot <- PTCA4CATA::createFactorMap(Fi,
+                                       
+                                        col.points = col4pianist,
+                                        col.labels = col4pianist,
+                                        axis1 = 1,
+                                        axis2 = 2,
+                                        title = 'Music Pieces Map',
+                                        alpha.points = 0.8,
+                                      display.labels = FALSE
+)
+
+labels4S <- createxyLabels.gen(lambda = resDistatis$res4Splus$eigValues,
+                                tau = resDistatis$res4Splus$tau,
+                                axisName = "Dimension ")
+
+# Plain map with color for the I-set
+Fi.2map <- Fi2.plot$zeMap + labels4S 
+  
+
+
+
+#Creating means 
+
+design.pianist<- as.matrix(Design_row$Pianist)
+
+grp.ind <- order(design.pianist)[!duplicated(sort(design.pianist))]
+grp.col <- col4pianist
+grp.name <- design.pianist[grp.ind] # get the corresponding groups
+names(grp.col) <- grp.name
+
+#------------------------------------------------------------------------------------
+pianist.mean <- aggregate(Fi,
+                        by = list(design.pianist),
+                        # must be a list
+                        mean
+                        )
+
+
+
+rownames(pianist.mean) <- pianist.mean[,1] # Use the first column as row names
+fi2.mean <- pianist.mean[,-1] # Exclude the first column
+
+#------------------------------------------------------------------------------------------
+fi2.mean.plot <- createFactorMap(fi2.mean,
+                                alpha.points = 1,
+                                display.labels = TRUE,
+                                col.points = col4pianist.Means,
+                                col.labels = col4pianist.Means,
+                                pch = 17,
+                                cex = 3,
+                                text.cex = 4
+                                )
+
+Fi2.withMeans <- Fi.2map + labels4S +fi2.mean.plot$zeMap_dots + fi2.mean.plot$zeMap_text
+
+
+Fi2.withMeans 
+
+#creating confidence intervals
+
+BootCube <- PTCA4CATA::Boot4Mean(Fi, 
+                                 design = design.pianist,
+                                 niter = 100,
+                                 suppressProgressBar = TRUE)
+
+
+
+# Create the ellipses using function MakeCIEllipses from package PTCA4CATA
+GraphElli <- PTCA4CATA::MakeCIEllipses(BootCube$BootCube[,1:2,],
+                                       names.of.factors = c("Factor 1","Factor 2"),
+                                       col = col4pianist.Means, 
+                                       p.level = .95
+)
+
+# create the I-map with Observations, means and confidence intervals
+Map.J2.withCI <-  Fi2.withMeans +  GraphElli + labels4S + ggtitle(" Music Pieces with Confidence Intervals")
+
+Map.J2.withCI
+
+```
+
+Plotting the partial Factor scores
+
+The experts amongst the participants appear to be much diffferent than the rest of the participants because their dintance from the compromise factor score is larger.
+
+This is much more clear while observing the means of the partial factor scores.
+
+```{r}
+pFi <- F_k
+
+
+map4PFS <- createPartialFactorScoresMap(
+                                        factorScores = Fi,
+                                        partialFactorScores = pFi,
+                                        
+                                        axis1 = 1, axis2 = 2,
+                                        colors4Items = as.vector(col4Music),
+                                        colors4Blocks = as.vector(col4means),
+#colors4Blocks = c("lightblue", "skyblue","midnightblue"),
+
+                                        names4Partial = dimnames(pFi)[[3]], #
+                                        font.labels = 'bold',
+                                        size.labels = 2)
+
+plot.pFi1 <-  Fi.plot$zeMap +map4PFS$mapColByItems 
+plot.pFi1 
+
+
+
+plot.pFi2 <- Fi.plot$zeMap + labels4S + map4PFS$mapColByBlocks 
+
+plot.pFi2
+```
+
+Partial factor scores with Means(Music pieces)
+
+
+Experts are different from movice by a large amount when trying to group Mozart and Bach music pieces together than when grouping Beethoven pieces together. 
+
+While goruping Beethiven music together, experts and medium level participants do almost an equal job. 
+
+```{r echo=TRUE}
+ 
+meanfk <-
+  apply(F_k, c(2,3), FUN = function(x){
+  aggregate(x, by = list(Design_row$Music), mean)$x
+  })
+dim(meanfk)  
+
+mean.plot <- createFactorMap(fi.mean,
+                                constraints = minmaxHelper4Partial(fi.mean, meanfk, axis1 = 1 ,axis2 = 2) ,                               
+                              alpha.points = 1,
+                                display.labels = TRUE,
+                                col.points = col4Music.Means,
+                                col.labels = col4Music.Means,
+                                pch = 17,
+                                cex = 3,
+                                text.cex = 4
+                                )
+
+Fi.meanonly.plot<- mean.plot$zeMap_background+mean.plot$zeMap_dots + mean.plot$zeMap_text+ labels4S
+
+Fi.meanonly.plot
+
+
+pf.means <- createPartialFactorScoresMap(
+                                        factorScores = fi.mean,
+                                        partialFactorScores = meanfk,
+                                        axis1 = 1, axis2 = 2,
+                                        colors4Items = as.vector(col4Music.Means),
+colors4Blocks = as.vector(col4means),
+                                        names4Partial = dimnames(meanfk)[[3]], #
+                                        font.labels = 'bold',
+                                        size.labels = 4,
+)
+
+plot.pFi.mean <- Fi.meanonly.plot + labels4S+ pf.means$mapColByItems
+
+plot.pFi.mean2 <- Fi.meanonly.plot + labels4S+ pf.means$mapColByBlocks
+plot.pFi.mean2
+
+```
+
+
+Partial factor scores with Means(Pianist)
+
+Experts are different from movice by a large amount when trying to group Arrau and Pires pieces together.
+Medium Group is not significantly different in grouping any of these pianinsts.
+
+```{r echo=FALSE}
+
+
+meanfk2 <-
+  apply(F_k, c(2,3), FUN = function(x){
+  aggregate(x, by = list(Design_row$Pianist), mean)$x
+  })
+dim(meanfk2)  
+
+
+mean.plot2 <- createFactorMap(fi2.mean,
+                                constraints = minmaxHelper4Partial(fi2.mean, meanfk2, axis1 = 1 ,axis2 = 2) ,                               
+                              alpha.points = 1,
+                                display.labels = TRUE,
+                                col.points = col4pianist.Means,
+                                col.labels = col4pianist.Means,
+                                pch = 17,
+                                cex = 3,
+                                text.cex = 4
+                                )
+
+Fi.meanonly.plot2<- mean.plot2$zeMap_background+ mean.plot2$zeMap_dots + mean.plot2$zeMap_text+ labels4S
+
+Fi.meanonly.plot2
+
+
+pf.means2 <- createPartialFactorScoresMap(
+                                        factorScores = fi2.mean,
+                                        partialFactorScores = meanfk2,
+                                        axis1 = 1, axis2 = 2,
+                                        colors4Items = as.vector(col4pianist.Means),
+colors4Blocks = as.vector(col4means),
+                                        names4Partial = dimnames(meanfk2)[[3]], #
+                                        font.labels = 'bold',
+                                        size.labels = 4,
+)
+
+mean.pfi <- Fi.meanonly.plot2 + labels4S+ pf.means2$mapColByItems
+
+
+mean.pfi.block <- Fi.meanonly.plot2 + labels4S+ pf.means2$mapColByBlocks
+mean.pfi.block
+
+
+
+```

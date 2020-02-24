@@ -1,0 +1,645 @@
+---
+title: "MFA analysis"
+author: "Kirthana"
+date: "07/11/2019"
+output: html_document
+---
+
+```{r setup}
+
+rm(list = ls())
+graphics.off()
+knitr::opts_chunk$set(echo = TRUE)
+#rm(list = ls())
+#graphics.off()
+#install.packages('TExposition')
+#install.packages('TInPosition') # if needed
+library(TExPosition)
+library(TInPosition)
+library(PTCA4CATA)
+#devtools::install_github('HerveAbdi/data4PCCAR', force = TRUE)
+library(data4PCCAR)
+
+#install.packages("MExPosition")#install.packages("dplyr")
+library(tidyverse)
+library(ExPosition)
+library(MExPosition)
+#devtools::install_github('HerveAbdi/data4PCCAR')
+library(PTCA4CATA)
+library(data4PCCAR)
+library(dplyr)
+#install.packages("readxl")
+#install.packages("cowplot")
+library(ggcorrplot)
+library(corrplot)
+library(ggplot2)
+library(cowplot)
+# install.packages('gplots')
+library(readr)
+library(gridExtra)
+
+library(ggplotify)
+library(grid)
+library(readxl)
+```
+
+```{r data_set, echo= FALSE}
+#load and read dataset....
+
+sam <- read_excel("data1_sam.xlsx")
+osic <-read_excel("data2_osiq.xlsx")
+bfi <- read_excel("data3_Bfi.xlsx")
+head(sam)
+dim(sam)
+
+head(osic)
+dim(osic)
+
+head(bfi)
+dim(bfi)
+
+d1 <-sam
+data1_active <- d1[!(d1$Active == FALSE),]
+data1 <-data1_active[,c(6:31)]
+
+d2 <-osic
+data2_active <- d2[!(d2$Active == FALSE),]
+data2 <-data2_active[,c(6:35)]
+
+d3<- bfi
+data3_active <- d3[!(d3$Active == FALSE),]
+data3 <-data3_active[,c(6:49)]
+
+row.design <- data1_active$memoryGroups
+
+# make the design into a vector
+row.design.vec <- as.matrix(row.design)
+rownames(row.design.vec) <- rownames(data1)
+
+data_MFA<- cbind(data1,data2,data3)
+
+n1<-26
+c1<-rep(1, each=n1)
+n2<-30
+c2<-rep(2,each=n2)
+n3<-44
+c3<-rep(3, each=n3)
+
+col.design <- c(c1,c2,c3)
+```
+
+Setting up colours
+```{r setting up colours}
+# colour for rows
+col4row <- data1_active$memoryGroups
+col4row <- recode(col4row, 
+                  Norm = 'orange2', 
+                  High = 'darkred'
+                   )
+
+#color for colums
+
+E <- c("#5f9ea0","#5f9ea0","#5f9ea0","#5f9ea0","#5f9ea0","#5f9ea0","#5f9ea0","#5f9ea0")
+S<- c("#305ABF","#305ABF","#305ABF","#305ABF","#305ABF","#305ABF")
+P <- c("#76ee00","#76ee00","#76ee00","#76ee00","#76ee00","#76ee00")
+Fu <- c("#ff7f24", "#ff7f24", "#ff7f24", "#ff7f24", "#ff7f24", "#ff7f24")
+col4Var1 <- as.matrix(c(E,S,P,Fu)) 
+
+object <- 15
+ob <-rep("gold", each = object)
+
+spatial<- 15
+sp <-rep("olivedrab4", each = spatial)
+
+
+col4Var2 <- as.matrix(c(ob,sp)) 
+
+
+Extrovert<- 8
+Ex<- rep("royalblue1", each = Extrovert)
+
+Agreeableness <- 9
+Ag<-rep("indianred1", each = Agreeableness )
+
+Conscientiousness <- 9
+Co<-rep("violetred4", each = Conscientiousness)
+
+Neuroticism <- 8
+Ne<- rep("darkseagreen", each =Neuroticism)
+
+Openness <- 10
+Op<- rep("mediumpurple3" , each =Openness)
+
+col4Var3<- as.matrix(c(Ex,Ag,Co,Ne,Op))
+
+col4combined<- as.matrix(c(col4Var1,col4Var2,col4Var3))
+
+```
+
+MFA analysis
+```{r first pass mfa}
+res.mfa <- mpMFA(data_MFA,
+                 column.design = t(col.design),
+                 make.columndesign.nominal = TRUE,
+                 DESIGN = row.design,
+                 make.design.nominal = TRUE,
+                 graphs = FALSE
+)
+```
+RV heat map
+
+```{r heat map}
+rv<- res.mfa$mexPosition.Data$InnerProduct$RVMatrix
+rownames(rv)<-c("SAM","OSIQ","BFI")
+colnames(rv)<-rownames(rv)
+
+heatmap(rv,Rowv=NA,Colv = NA)
+          
+```
+```{r correlation plot }
+XYZ.cor <- cor(data_MFA)
+
+plot.new()
+corr.plot1<-corrplot(XYZ.cor, method = "color",tl.col = col4combined,tl.cex = .3, cl.pos ='b',
+         col = colorRampPalette(c("darkred", "white","midnightblue"))(20)
+          )
+
+lines(c(26.5, 26.5), c(0,100 ), lwd=1, lty=1)
+lines(c(56.5, 56.5), c(0,100), lwd=1, lty=1)
+lines(c(0,100),c(44.5, 44.5), lwd=1, lty=1)
+lines(c(0,100),c(74.5, 74.5), lwd=1, lty=1)
+
+corr.plot1<- recordPlot()
+
+```
+MFA Weights applies to each table
+```{r weights for each table}
+
+
+Eig.tab <- res.mfa$mexPosition.Data$Compromise$compromise.eigs
+Alpha <- 1/sqrt(Eig.tab)
+
+weight <- Alpha
+
+plot.weights <-barplot(weight, main= "Weights",
+        col = as.vector(c("pink4","seagreen","royalblue") ),
+        xlab= " data tables")
+
+
+plot.weights<- recordPlot()
+```
+Scree Plot
+
+```{r mfa scree plot}
+
+
+my.scree <- PlotScree(ev =res.mfa$mexPosition.Data$Table$eigs, 
+                      title = "MFA Scree Plot", 
+                      plotKaiser = TRUE,
+                      p.ev = res.mfa$mexPosition.Data$Compromise$compromise.t
+                      )
+my.scree
+my.scree <- recordPlot()
+```
+
+Global Row Factor scores:
+
+```{r Global Row factor scores }
+
+#Global row factor scores
+Fi <-res.mfa$mexPosition.Data$Table$fi
+
+
+col4means<- gplots::col2hex(c( 'darkred', 'orange3'))
+
+# Labels for Inertia
+label4Map.mfa <- createxyLabels.gen(1,2,
+                                    lambda = res.mfa$mexPosition.Data$Table$eigs,
+                                    tau = res.mfa$mexPosition.Data$Table$t)
+
+#MFA I-set map Dimension(1 and 2)
+baseMap.i <- PTCA4CATA::createFactorMap( Fi,
+                                         title = "MFA global Factor Scores",
+                                         col.points = col4row,
+                                         display.labels = FALSE,
+                                         alpha.points = .4
+                                         )
+
+aggMap.i <- baseMap.i$zeMap_background + baseMap.i$zeMap_dots + label4Map.mfa
+
+aggMap.i
+
+
+
+grp.ind <- order(data1_active$memoryGroups)[!duplicated(sort(data1_active$memoryGroups))]
+grp.col <- col4row
+grp.name <- data1_active$memoryGroups[grp.ind] # get the corresponding groups
+names(grp.col) <- grp.name
+
+
+group.mean <- aggregate(Fi,
+                        by = list(data1_active$memoryGroups),
+                        # must be a list
+                        mean
+                        )
+group.mean
+
+
+rownames(group.mean) <- group.mean[,1] # Use the first column as row names
+fi.mean <- group.mean[,-1] # Exclude the first column
+fi.mean
+
+fi.mean.plot <- createFactorMap(fi.mean,
+                                alpha.points = 1,
+                                display.labels = TRUE,
+                                col.points = col4means,
+                                col.labels = col4means,
+                                pch = 17,
+                                cex = 3,
+                                text.cex = 4
+                                )
+
+aggMap.i.withMeans <- aggMap.i + label4Map.mfa +fi.mean.plot$zeMap_dots + fi.mean.plot$zeMap_text
+
+
+
+## MFA Confidence Intervals - Bootstrap for CI
+
+BootCube <- PTCA4CATA::Boot4Mean(res.mfa$mexPosition.Data$Table$fi, 
+                                 design = row.design,
+                                 niter = 100,
+                                 suppressProgressBar = TRUE)
+
+
+# Create the ellipses using function MakeCIEllipses from package PTCA4CATA
+GraphElli <- PTCA4CATA::MakeCIEllipses(BootCube$BootCube[,1:2,],
+                                       names.of.factors = c("Dimension 1","Dimension 2"),
+                                       col = col4means, 
+                                       p.level = .95
+)
+
+# create the I-map with Observations, means and confidence intervals
+Map.I.withCI <-  aggMap.i.withMeans +  GraphElli + label4Map.mfa + ggtitle(" Global Row Factor Scores with Confidence Intervals")
+
+Map.I.withCI
+Map.I.withCI <- recordPlot()
+
+
+aggMap.i.withMeans<- recordPlot()
+
+```
+Partial factor scores
+
+```{r partial row factor scores}
+
+F_j<- res.mfa$mexPosition.Data$Table$partial.fi.array
+
+res.mfa$mexPosition.Data$InnerProduct$alphaWeights
+
+Eig.tab <- res.mfa$mexPosition.Data$Compromise$compromise.eigs
+alpha_j <- 1/sqrt(Eig.tab)
+
+data_tables<- col.design
+code4Groups<- unique(data_tables)
+nK<- length(code4Groups)
+
+
+F_k <- array(0, dim = c(dim(F_j)[[1]], dim(F_j)[[2]],nK))
+dimnames(F_k) <- list(dimnames(F_j)[[1]], dimnames(F_j)[[2]], code4Groups)
+
+alpha_k <- rep(0, nK)
+names(alpha_k) <- code4Groups
+Fa_j <- F_j
+
+# A horrible loop
+for (j in 1:dim(F_j)[[3]]){ Fa_j[,,j] <- F_j[,,j] * alpha_j[j] }
+
+# Another horrible loop
+for (k in 1:nK){
+ # lindex <- data_tables == code4Groups[k]
+  alpha_k[k] <- alpha_j[k]
+  F_k[,,k] <- (1/alpha_k[k])*apply(Fa_j[,,k],c(1,2),sum)
+
+}
+
+
+group.mean <- apply(aggregate(F_k,
+                    by = list(row.design),
+                   # must be a list
+                    mean
+                    ))
+
+meanfk <-
+  apply(F_k, c(2,3), FUN = function(x){
+  aggregate(x, by = list(row.design), mean)$x
+  })
+dim(meanfk)  
+
+
+
+
+
+ mean.plot <- createFactorMap(fi.mean,
+                                constraints = minmaxHelper4Partial(fi.mean, meanfk, axis1 = 1 ,axis2 = 2) ,                               
+                              alpha.points = 1,
+                                display.labels = TRUE,
+                                col.points = col4means,
+                                col.labels = col4means,
+                                pch = 17,
+                                cex = 3,
+                                text.cex = 4
+                                )
+
+Fi.meanonly.plot<- mean.plot$zeMap_background+mean.plot$zeMap_dots + mean.plot$zeMap_text+ label4Map.mfa
+
+Fi.meanonly.plot
+
+
+pf.means <- createPartialFactorScoresMap(
+                                        factorScores = fi.mean,
+                                        partialFactorScores = meanfk,
+                                        axis1 = 1, axis2 = 2,
+                                        colors4Items = as.vector(col4means),
+#colors4Blocks = c("lightblue", "skyblue","midnightblue"),
+                                        names4Partial = dimnames(meanfk)[[3]], #
+                                        font.labels = 'bold',
+                                        size.labels = 5,
+)
+
+plot.pFi.mean <- Fi.meanonly.plot + label4Map.mfa + pf.means$mapColByItems
+
+plot.pFi.mean
+
+```
+
+
+```{r partial factor scores }
+Fi<- res.mfa$mexPosition.Data$Table$fi
+pFi <- F_k
+
+
+colnames(Fi)<- c(paste0('Dimension ',1:100))
+colnames(pFi)<-c(paste0('Dimension ',1:100))
+
+
+map4PFS <- createPartialFactorScoresMap(
+                                        factorScores = Fi[,1:2],
+                                        partialFactorScores = pFi[,1:2,],
+                                        axis1 = 1, axis2 = 2,
+                                        colors4Items = as.vector(col4row),
+#colors4Blocks = c("lightblue", "skyblue","midnightblue"),
+                                        names4Partial = dimnames(pFi)[[3]], #
+                                        font.labels = 'bold',
+                                        size.labels = 5)
+
+plot.pFi1 <- baseMap.i$zeMap + label4Map.mfa+
+map4PFS$mapColByItems
+
+plot.pFi1 
+
+plot.pFi1 <- recordPlot()
+
+
+plot.pFi2 <- baseMap.i$zeMap + label4Map.mfa+
+map4PFS$mapColByBlocks 
+
+plot.pFi2
+
+plot.pFi2 <- recordPlot()
+
+```
+Column Factor scores
+```{r column factor scores}
+
+Q <- res.mfa$mexPosition.Data$Table$Q
+
+
+label4Map.mfa <- createxyLabels.gen(1,2,
+                                    lambda = res.mfa$mexPosition.Data$Table$eigs,
+                                    tau = res.mfa$mexPosition.Data$Table$t)
+
+baseMap.j <- createFactorMap(Q, #constraints = constraints.sym,
+                             col.points = col4combined,
+                             col.labels = col4combined,
+                             display.labels = TRUE,
+                             display.points = TRUE,
+                             text.cex = 3,
+                             force=2,
+                             cex =2,
+                             title = "Loadings Map: Dimension 1 & 2")
+
+
+#lines4J <- addLines4MCA(Fj, col4Var = col4Levels.imp$color4Variables, size = 1)
+
+Loadings_12 <- baseMap.j$zeMap+ label4Map.mfa
+
+Loadings_12
+Loadings_12<- recordPlot()
+
+
+baseMap.j.2 <- PTCA4CATA::createFactorMap(Q, axis1 = 3, axis2 = 2,
+                                        col.points   =  gplots::col2hex(col4combined),
+                                        alpha.points =  .8, 
+                                        alpha.labels = .8,
+                                        col.labels   =  gplots::col2hex(col4combined),  
+                                        force = 5, 
+                                        cex = 2, 
+                                        text.cex = 3, 
+                                        title = "Loadings Map: Dimension 2 and 3")
+
+# A graph for the J-set 2 and 3
+Loadings_23 <- baseMap.j.2$zeMap + label4Map.mfa
+
+Loadings_23
+
+Loadings_23<- recordPlot()
+
+```
+
+```{r row contributions}
+
+ctrI<- res.mfa$mexPosition.Data$Table$ci
+
+signed.ctrI <- as.matrix( ctrI * sign(Fi))
+
+colnames(signed.ctrI)<- c(paste0('Dimension ',1:100))
+rownames(signed.ctrI)<-c(paste0('', 1:144))
+
+
+plotctrI.1 <- PrettyBarPlot2(bootratio = round(100*signed.ctrI[,1]), 
+                       threshold = 100 / nrow(signed.ctrI), 
+                       ylim = NULL, 
+                       color4bar = gplots::col2hex(as.matrix(col4row)),
+                       color4ns = "gray75", 
+                       plotnames = TRUE, 
+                       main = 'Row Contributions dim 1', 
+                       ylab = "Signed Contributions")
+
+plotctrI.1
+
+plotctrI.2 <- PrettyBarPlot2(
+                   bootratio = round(100*signed.ctrI[,2]), 
+                   threshold = 100 / nrow(signed.ctrI), 
+                   ylim = NULL, 
+                   color4bar = gplots::col2hex(as.matrix(col4row)),
+                   color4ns = "gray75", 
+                   plotnames = TRUE, 
+                   main = 'Row ContributionsDim 2.', 
+                   ylab = "Signed Contributions")
+plotctrI.2
+
+```
+
+```{r column contibutions}
+
+Fj<- res.mfa$mexPosition.Data$Table$Q
+ctrJ<- res.mfa$mexPosition.Data$Table$cj
+signed.ctrJ <- ctrJ * sign(Fj)
+
+plotctrJ.1 <- PrettyBarPlot2(
+                       bootratio = round(100*signed.ctrJ[,1]), 
+                       threshold = 100 / nrow(signed.ctrJ), 
+                       ylim = NULL, 
+                       color4bar = gplots::col2hex(col4combined),
+                       color4ns = "gray75", 
+                       plotnames = TRUE, 
+                       main = 'Column Contributions Dim 1.', 
+                       ylab = "Signed Contributions",
+                       signifOnly = TRUE,
+                       font.size = 5)
+
+plotctrJ.1
+
+plotctrJ.2 <- PrettyBarPlot2(
+                       bootratio = round(100*signed.ctrJ[,2]), 
+                       threshold = 100 / nrow(signed.ctrJ), 
+                       ylim = NULL, 
+                       color4bar = gplots::col2hex(col4combined),
+                       color4ns = "gray75", 
+                       plotnames = TRUE, 
+                       main = 'Column Contributions Dim 2.', 
+                       ylab = "Signed Contributions",
+                       signifOnly = TRUE,
+                       font.size = 5)
+
+plotctrJ.2 
+
+plotctrJ.3 <- PrettyBarPlot2(
+                       bootratio = round(100*signed.ctrJ[,3]), 
+                       threshold = 100 / nrow(signed.ctrJ), 
+                       ylim = NULL, 
+                       color4bar = gplots::col2hex(col4combined),
+                       color4ns = "gray75", 
+                       plotnames = TRUE, 
+                       main = 'Column Contributions Dim 3.', 
+                       ylab = "Signed Contributions",
+                      signifOnly = TRUE,
+                      font.size = 5)
+
+plotctrJ.3
+
+
+```
+Important Factor Scores
+
+```{r Importnant contributions only}
+ctrK <- res.mfa$mexPosition.Data$Table$Q
+
+
+
+var12 <- data4PCCAR::getImportantCtr(ctr = ctrK,
+                                     eig = res.mfa$mexPosition$Table$eigs,
+                                     axis1 = 1,
+                                     axis2 = 2
+                                     )
+importantVar <- var12$importantCtr.1or2
+col4ImportantVar <- col4combined
+col4NS <- 'gray90'
+col4ImportantVar[!importantVar] <- col4NS
+ctrV12.imp <- PTCA4CATA::createFactorMap(X = ctrK,
+                                         title = "Important Variables: Contributions",
+                                         col.points = col4ImportantVar,
+                                         col.labels = col4ImportantVar,
+                                         alpha.points = 0.5,
+                                         cex = 2.5,
+                                         alpha.labels = 1,
+                                         text.cex = 4,
+                                         font.face = "plain",
+                                         font.family = "sans")
+a0008.Var.ctr12.imp <- ctrV12.imp$zeMap + label4Map.mfa
+a0008.Var.ctr12.imp
+
+a0008.Var.ctr12.imp <- recordPlot()
+
+
+label4Map23.mfa <- createxyLabels.gen(3,2,
+                                    lambda = res.mfa$mexPosition.Data$Table$eigs,
+                                    tau = res.mfa$mexPosition.Data$Table$t)
+
+
+#Variable contribution map with Dimensions 2 & 3
+
+var32 <- data4PCCAR::getImportantCtr(ctr = ctrK,
+                                     eig = res.mfa$mexPosition.Data$Table$eigs,
+                                     axis1 = 3,
+                                     axis2 = 2
+                                     )
+importantVar32 <- var32$importantCtr.1or2
+col4ImportantVar32 <- col4combined
+col4NS <- 'gray90'
+col4ImportantVar32[!importantVar32] <- col4NS
+
+
+
+ctrV32.imp <- PTCA4CATA::createFactorMap(X = ctrK,
+                                         axis1 = 3, axis2 = 2,
+                                         title = "Important Variables: Contributions 3 2",
+                                         col.points = col4ImportantVar32,
+                                         col.labels = col4ImportantVar32,
+                                         alpha.points = 0.5,
+                                         cex = 2.5,
+                                         alpha.labels = 1,
+                                         text.cex = 4,
+                                         font.face = "plain",
+                                         font.family = "sans")
+
+
+a0009.Var.ctr32.imp <- ctrV32.imp$zeMap + label4Map23.mfa
+a0009.Var.ctr32.imp
+a0009.Var.ctr32.imp <- recordPlot()
+
+
+
+```
+
+
+
+
+
+
+
+```{r grid plot with contribution and bootstrap ratios, fig.width = 30, fig.height = 25}
+
+
+grid.barplot1 <-gridExtra::grid.arrange(as.grob(plotctrJ.1 ),
+                        as.grob(plotctrJ.2 ),
+                         as.grob(plotctrJ.3 ),
+                        ncol = 1,nrow = 3 ,
+                        top = textGrob("Column Contribution barplots",
+                        gp=gpar(fontsize=18,font=3))
+                       )
+
+grid.barplot1
+grid.barplot1<- recordPlot()
+```
+
+```{r}
+# Here we can save all figures to a PowerPoint
+savedList <- saveGraph2pptx(file2Save.pptx = 'MFAfigures', 
+                            title = 'All Figures', 
+                            addGraphNames = TRUE)
+
+```
+
+
+)
