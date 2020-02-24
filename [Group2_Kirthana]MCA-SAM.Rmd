@@ -1,0 +1,671 @@
+# Multiple Correspondence Analysis
+
+**Data table:** MCA is used to analyze one table when data is a combination of qualitative and quantitative variables, for instance
+to analyze the relationship between several categorical variables in a data table. 
+
+**Goal:** Hels tp identify thr observations which have a similar profile and also identifies assosiations between the variable categories, i.e assosiations within the levels.
+
+
+**Key ideas**
+        
+        1. MCA is technically a CA done on indicator matrix of a data table. Even quantitative variables can be analyzed by
+           binning them, once binned these are again converted to binary values using disjunctive coding(one hot encoding).
+        
+        2. MCA can also be seen as a generalization of principal component analysis when the variables to be analyzed are
+           categorical instead of quantitative.
+
+**Interpretation**
+      
+        1. One variable represents as many points as levels.	
+        
+        2. Levels	of variables close to each other are chosen together.	
+        
+        3. Variance	of the levels	of a variable =	importance of	the	variable.	
+        
+        4. Row Factor scores are the coordinates of the row observations. They are interpreted by the distances between
+           them, and heir distance from the origin. 
+
+
+```{r, include=FALSE}
+rm(list = ls())
+graphics.off()
+knitr::opts_chunk$set(echo = TRUE)
+
+#devtools::install_github('HerveAbdi/data4PCCAR',force = TRUE)
+
+
+#install.packages("ggcorrplot")
+
+library(ggcorrplot)
+library(ExPosition)
+library(InPosition)
+# use the last version of PTCA
+#devtools::install_github('HerveAbdi/PTCA4CATA')
+library(PTCA4CATA)
+library(corrplot)
+library(ggplot2)
+
+# install.packages('gplots')
+# also install data4PCCAR last version
+library(data4PCCAR)
+library(readr)
+library(gridExtra)
+library(ggplotify)
+library(grid)
+library(readxl)
+library(dplyr)
+```
+
+## Dataset : Survey of autobiographical memory 
+
+
+```{r data clean, include=FALSE}
+SAMfulldataset <- read_excel("C:\\Users\\KIRTHANA\\Desktop\\UT dallas\\ABDI LAB\\SAM_OSIQ\\SAM_only.xlsx")
+
+
+d <-SAMfulldataset 
+
+
+d_active <- d[!(d$Active == FALSE),]
+d_use <- d[!(d$Active == FALSE),]
+d_MCA <-d_active[,c(6:31)]
+d_Num<- d_MCA
+```
+
+Looking data Pattern
+
+Histograms:
+Plots the distribution of data across the variables. SAM questionaire has differen question types assesing different types of memory ( Episodic, Semantic, Spatial ,Future). We look at the histogram for each type of question. 
+
+```{r echo=TRUE}
+E<-d_MCA[ ,c(1:8)]
+S<-d_MCA[ ,c(9:14)]
+P<-d_MCA[ ,c(15:20)]
+Fu<-d_MCA[ ,c(21:26)]
+
+list <-lapply(1:ncol(E),
+             function(col) ggplot2::qplot(E[[col]],xlab = "scale", ylab =" freq",
+                                          main = names(E[col]),
+                                          geom = "histogram", fill=I("lightblue"), 
+                                          col=I("black"), binwidth = 1))
+
+cowplot::plot_grid(plotlist = list)
+
+```
+
+Similarly the plotting histograms for Semantic, Spatial and Future memory.
+```{r echo=FALSE}
+list <-lapply(1:ncol(S),
+              function(col) ggplot2::qplot(S[[col]],xlab = "scale", ylab =" freq",
+                                           main = names(S[col]),
+                                           geom = "histogram", fill=I("lightblue"), 
+                                           col=I("black"),
+                                           binwidth = 1))
+
+cowplot::plot_grid(plotlist = list)
+
+
+
+list <-lapply(1:ncol(P),
+              function(col) ggplot2::qplot(P[[col]],xlab = "scale", ylab =" freq",
+                                           main = names(P[col]),
+                                           geom = "histogram", fill=I("lightblue"), 
+                                           col=I("black"),
+                                           binwidth = 1))
+
+cowplot::plot_grid(plotlist = list)
+
+
+
+
+list <-lapply(1:ncol(Fu),
+              function(col) ggplot2::qplot(Fu[[col]],xlab = "scale", ylab =" freq",
+                                           main = names(Fu[col]),
+                                           geom = "histogram", fill=I("lightblue"), 
+                                           col=I("black"),
+                                           binwidth = 1))
+
+cowplot::plot_grid(plotlist = list)
+
+
+#table(d_MCA$F1) to check the frequencies
+
+```
+
+Conversion to Disjunctive matrix 
+```{r  echo=FALSE}
+#disjunctive matrix conversion
+
+d_Num<-as.data.frame(d_Num)
+d_Num.dis<-makeNominalData(d_Num)
+d_Num.dis<- d_Num.dis[, order(colnames(d_Num.dis))]
+
+head(d_Num.dis, n = 2)
+```
+
+```{r include=FALSE}
+E <- c("#5f9ea0","#5f9ea0","#5f9ea0","#5f9ea0","#5f9ea0","#5f9ea0","#5f9ea0","#5f9ea0")
+S <- c("#ff7f24", "#ff7f24", "#ff7f24", "#ff7f24", "#ff7f24", "#ff7f24")
+P <- c("#76ee00","#76ee00","#76ee00","#76ee00","#76ee00","#76ee00")
+Fu<- c("#305ABF","#305ABF","#305ABF","#305ABF","#305ABF","#305ABF")
+
+col4Var <- as.matrix(c(E,Fu,P,S)) 
+
+
+col4row <- d_use$memoryGroups
+col4row <- recode(col4row, 
+                  Low = 'orange',
+                  Norm = 'tomato', 
+                  High = 'darkred'
+                     )
+
+
+
+
+```
+
+## Correlation Plot 
+
+Burt Matrix : the matrix of all two-way cross-tabulations of the categorical variables. It is the inner product of design indicator matrix.
+
+Note : MCA is applied to the Burt matrix
+```{r echo=FALSE}
+
+#converting to burt table for finding correlation
+
+corrMatBurt.list <- phi2Mat4BurtTable(d_Num)
+
+
+#set.seed(1)
+#X = matrix(runif(1000),ncol=10)
+#png(file="corr.png", res=300, width=15000, height=15000)
+
+corrMCA <-corrplot(as.matrix(sqrt(corrMatBurt.list$phi2.mat)), 
+         tl.cex = .5, tl.col = col4Var, method = "color", 
+         addCoef.col = "black", number.digits = 0, number.cex = .5, 
+         cl.pos = 'b', cl.cex = .3, 
+         addCoefasPercent = TRUE,
+         col = colorRampPalette(c("darkred", "white","midnightblue"))(20),
+         #outline = T,addrect = 3, rect.lwd = 3
+         )
+
+#dev.off()
+```
+
+
+
+## MCA Analysis
+```{r echo=TRUE}
+
+resMCA <- epMCA(DATA = d_Num.dis,
+                make_data_nominal = FALSE,
+                DESIGN = d_use$memoryGroups,
+                graphs = FALSE # TRUE first pass only
+                )
+
+# looking at contributions
+ctrK <- ctr4Variables(resMCA$ExPosition.Data$cj)
+rownames(col4Var) <- rownames(ctrK)
+
+# running inference for MCA
+resMCA.inf <- InPosition::epMCA.inference.battery(DATA = d_Num.dis,
+                                                  DESIGN = d_use$memoryGroups,
+                                                  make_data_nominal = FALSE,
+                                                  graphs =  FALSE)
+```
+
+### Scree Plot
+
+
+**Note :** MCA -- overestimates variance explained
+               -- underestimates eigenvalues
+
+The so-called 'percentage of inertia problem' can be improved by using adjusted inertias procedure or eigenvalue correction.
+
+
+```{r}
+# Scree ----
+screePlot <- PlotScree(ev = resMCA$ExPosition.Data$eigs, 
+          p.ev= resMCA.inf$Inference.Data$components$p.vals,
+          plotKaiser = TRUE,
+          )
+```
+
+```{r eval=FALSE, include=FALSE}
+
+
+# corrMatBurt.list <- phi2Mat4BurtTable(d_Num)
+# 
+# png(file="corr2.png", res=300, width=15000, height=15000)
+# 
+# corr4MCA.r <- corrplot(as.matrix(sqrt(corrMatBurt.list$phi2.mat)), 
+#          tl.cex = 5, tl.col = col4Var, method = "color", 
+#          addCoef.col = "black", number.digits = 0, number.cex = 4, 
+#          cl.pos = 'b', cl.cex = 3, 
+#          addCoefasPercent = TRUE,
+#          col = colorRampPalette(c("darkred", "white","midnightblue"))(20),
+#          #addrect = 3, rect.lwd = 3, outline = T 
+# )
+# 
+# dev.off()
+
+
+```
+
+
+## Factor Scores of the rows
+
+
+```{r row factor scores, echo=FALSE}
+#Create Factor Maps
+#I-set map --------------------------------------------------------------------------------
+Sam.Imap<- PTCA4CATA::createFactorMap(title = 'MCA: SAM Data Set',
+                                      resMCA$ExPosition.Data$fi,
+                                      col.points = col4row,
+                                      display.labels = FALSE,
+                                      alpha.points = .5
+                                      )
+
+#plotting the means
+
+# get index for the first row of each group
+grp.ind <- order(d_use$memoryGroups)[!duplicated(sort(d_use$memoryGroups))]
+grp.col <- resMCA.inf$Fixed.Data$Plotting.Data$fi.col[grp.ind] # get the color
+grp.name <- d_use$memoryGroups[grp.ind] # get the corresponding groups
+names(grp.col) <- grp.name
+
+
+#------------------------------------------------------------------------------
+
+
+
+group.mean <- PTCA4CATA::getMeans(resMCA.inf$Fixed.Data$ExPosition.Data$fi,
+                        d_use$memoryGroups)
+
+col4Means <- recode(rownames(group.mean), 
+                    Low = 'orange',
+                    High = 'darkred', 
+                    Norm = 'tomato2', 
+                  )
+names(col4Means) <- rownames(group.mean)
+
+fi.mean.plot <- createFactorMap(group.mean,
+                                alpha.points = 1,
+                                display.labels = TRUE,
+                                col.points = col4Means,
+                                col.labels = col4Means,
+                                pch = 17,
+                                cex = 3,
+                                text.cex = 3
+                                )
+
+# make labels ----------------------------------------------------------------------------------------------------
+label4Map <- createxyLabels.gen(1,2,
+                                lambda = resMCA$ExPosition.Data$eigs,
+                                tau = resMCA$ExPosition.Data$t)
+
+# generating the maps-------------------------------------------------------------------------------------------
+
+a002.Map.I <- Sam.Imap$zeMap + label4Map +
+              fi.mean.plot$zeMap_dots +
+              fi.mean.plot$zeMap_text
+a002.Map.I
+
+
+
+#plotting Confidence Intervals- -------------------------------------------------------------
+# Depend on the size of your data, this might take a while
+fi.boot <- Boot4Mean(resMCA.inf$Fixed.Data$ExPosition.Data$fi,
+                     design = d_use$memoryGroups,
+                     niter = 1000)
+
+
+
+bootCI4mean <- MakeCIEllipses(fi.boot$BootCube[,c(1:2),], # get the first two components
+                              col = col4Means)
+
+# Check other parameters you can change for this function
+bootCI4mean <- MakeCIEllipses(fi.boot$BootCube[,c(1:2),], # get the first two components
+                              col = col4Means)
+
+fi.WithMeanCI <- Sam.Imap$zeMap + label4Map + 
+                 fi.mean.plot$zeMap_dots +
+                 fi.mean.plot$zeMap_text + 
+                 bootCI4mean 
+
+a003.Map.I <- fi.WithMeanCI
+
+a003.Map.I
+
+
+```
+
+## Column Factor scores
+
+```{r column factor scores, echo=FALSE}
+
+col4Var <- as.matrix(c(E,S,P,Fu)) 
+col4Levels <-  coloringLevels(rownames(resMCA$ExPosition.Data$fj), 
+                              col4Var)  
+col4Labels <- col4Levels$color4Levels
+#-------------------------------------------------------------------------
+axis1 = 1
+axis2 = 2
+# to save typing
+Fj <- resMCA$ExPosition.Data$fj
+
+# generate the set of maps
+BaseMap.Fj <- createFactorMap( Fj, # resMCA$ExPosition.Data$fj,
+                              axis1 = axis1, 
+                              axis2 = axis2,
+                              title = 'MCA. Variables', 
+                              col.points = col4Levels$color4Levels,
+                              cex = 1,
+                              col.labels = col4Levels$color4Levels,
+                              text.cex = 2.5,
+                              force = 2)
+
+
+# make the J-maps ----
+b001.BaseMap.Fj <- BaseMap.Fj$zeMap + label4Map 
+b002.BaseMapNoDot.Fj  <- BaseMap.Fj$zeMap_background +
+                         BaseMap.Fj$zeMap_text + label4Map 
+
+
+
+ctrV12 <- PTCA4CATA::createFactorMap(X = ctrK,
+                                     title = "Variable Contributions",
+                                     col.points = col4Var,
+                                     col.labels = col4Var,
+                                     alpha.points = 0.5,
+                                     cex = 2.5,
+                                     alpha.labels = 1,
+                                     text.cex = 4,
+                                     font.face = "plain",
+                                     font.family = "sans")
+ctr.labels <- createxyLabels.gen(
+  1,2, lambda = resMCA$ExPosition.Data$eigs,
+  tau = resMCA$ExPosition.Data$t
+)
+a0007.Var.ctr12 <- ctrV12$zeMap + ctr.labels
+a0007.Var.ctr12 
+
+
+ctr.labels32 <- createxyLabels.gen(
+  2,3, lambda = resMCA$ExPosition.Data$eigs,
+  tau = resMCA$ExPosition.Data$t
+)
+
+ctrV32 <- PTCA4CATA::createFactorMap(X = ctrK,
+                                         axis1 = 2, axis2 = 3,
+                                         title =  " Contributions 2*3",
+                                         col.points = col4Var,
+                                         col.labels = col4Var,
+                                         alpha.points = 0.5,
+                                         cex = 2.5,
+                                         alpha.labels = 1,
+                                         text.cex = 4,
+                                         font.face = "plain",
+                                         font.family = "sans")
+
+a0007.var.ctr32 <- ctrV32$zeMap +ctr.labels32
+
+a0007.var.ctr32 
+
+```
+Plotting the important contributions only
+
+```{r echo=TRUE}
+# Variable contribution plot with important variables only Dim 1 and 2
+var12 <- data4PCCAR::getImportantCtr(ctr = ctrK,
+                                     eig = resMCA$ExPosition.Data$eigs,
+                                     axis1 = 1,
+                                     axis2 = 2
+                                     )
+importantVar <- var12$importantCtr.1or2
+col4ImportantVar <- col4Var
+col4NS <- 'gray90'
+col4ImportantVar[!importantVar] <- col4NS
+ctrV12.imp <- PTCA4CATA::createFactorMap(X = ctrK,
+                                         title = "Important Variables: Contributions",
+                                         col.points = col4ImportantVar,
+                                         col.labels = col4ImportantVar,
+                                         alpha.points = 0.5,
+                                         cex = 2.5,
+                                         alpha.labels = 1,
+                                         text.cex = 4,
+                                         font.face = "plain",
+                                         font.family = "sans")
+a0008.Var.ctr12.imp <- ctrV12.imp$zeMap + ctr.labels
+a0008.Var.ctr12.imp
+
+
+
+#Variable contribution map with Dimensions 2 & 3
+
+var32 <- data4PCCAR::getImportantCtr(ctr = ctrK,
+                                     eig = resMCA$ExPosition.Data$eigs,
+                                     axis1 = 2,
+                                     axis2 = 3
+                                     )
+importantVar32 <- var32$importantCtr.1or2
+col4ImportantVar32 <- col4Var
+col4NS <- 'gray90'
+col4ImportantVar32[!importantVar32] <- col4NS
+
+
+
+ctrV32.imp <- PTCA4CATA::createFactorMap(X = ctrK,
+                                         axis1 = 2, axis2 = 3,
+                                         title = "Important Variables: Contributions 2 * 3",
+                                         col.points = col4ImportantVar32,
+                                         col.labels = col4ImportantVar32,
+                                         alpha.points = 0.5,
+                                         cex = 2.5,
+                                         alpha.labels = 1,
+                                         text.cex = 4,
+                                         font.face = "plain",
+                                         font.family = "sans")
+ctr.labels32 <- createxyLabels.gen(
+  2,3, lambda = resMCA$ExPosition.Data$eigs,
+  tau = resMCA$ExPosition.Data$t
+)
+a0009.Var.ctr32.imp <- ctrV32.imp$zeMap + ctr.labels32
+a0009.Var.ctr32.imp
+
+```
+
+
+```{r echo=FALSE}
+# Factor scores with levels of important Variables
+
+col4Levels.imp <- data4PCCAR::coloringLevels(rownames(Fj),
+                                             col4ImportantVar)
+BaseMap.Fj.imp <- createFactorMap(X = Fj , # resMCA$ExPosition.Data$fj,
+                                  axis1 = axis1, axis2 = axis2,
+                                  title = 'MCA. Important Variables',
+                                  col.points = col4Levels.imp$color4Levels,
+                                  cex = 1,
+                                  col.labels = col4Levels.imp$color4Levels,
+                                  text.cex = 2.5,
+                                  force = 2)
+
+b0010.BaseMap.Fj <- BaseMap.Fj.imp$zeMap + label4Map
+
+b0010.BaseMap.Fj #<- recordPlot()
+
+
+lines4J <- addLines4MCA(Fj, col4Var = col4Levels.imp$color4Variables, size = .7)
+
+
+b0020.BaseMap.Fj <- b0010.BaseMap.Fj + lines4J
+
+b0020.BaseMap.Fj
+ 
+ 
+
+zeNames <- getVarNames(rownames(Fj))
+importantsLabels <- zeNames$stripedNames %in% zeNames$variableNames[importantVar]
+Fj.imp <- Fj[importantsLabels,]
+lines4J.imp <- addLines4MCA(Fj.imp,
+                             col4Var = col4Levels$color4Variables[which(importantVar)],
+                             size = .9, linetype = 3, alpha = .5)
+b0021.BaseMap.Fj <- b0010.BaseMap.Fj + lines4J.imp
+b0021.BaseMap.Fj  
+ 
+
+ ##dimension 2 and 3
+ 
+ col4Levels32.imp <- data4PCCAR::coloringLevels(rownames(Fj),
+                                                col4ImportantVar32)
+ axis3 = 3
+ BaseMap.Fj32.imp <- createFactorMap(X = Fj , # resMCA$ExPosition.Data$fj,
+                                     axis1 = axis3, axis2 = axis2,
+                                     title = 'MCA. Important Variables. Dimensions 2 & 3',
+                                     col.points = col4Levels32.imp$color4Levels,
+                                     cex = 1,
+                                     text.cex = 2.5,
+                                     force = 2,
+                                     col.labels = col4Levels32.imp$color4Levels
+                                     )
+labels4MCA32 <- createxyLabels.gen(x_axis = axis3, y_axis = axis2,
+                                    lambda = resMCA$ExPosition.Data$eigs,
+                                    tau = resMCA$ExPosition.Data$t)
+
+b0030.BaseMap.Fj32 <- BaseMap.Fj32.imp$zeMap + labels4MCA32
+ # zeNames <- getVarNames(rownames(Fj))
+ 
+importantsLabels32 <- zeNames$stripedNames %in% zeNames$variableNames[importantVar32]
+ Fj32.imp <- Fj[importantsLabels32,]
+ lines4J32.imp <- addLines4MCA(Fj32.imp,
+                               col4Var = col4Levels$color4Variables[
+                                 which(importantVar32)],
+                               axis_h = axis3,
+                               axis_v = axis2,
+                               size = .9, linetype = 3, alpha = .5)
+ 
+ b0031.BaseMap.Fj32 <- b0030.BaseMap.Fj32 + lines4J32.imp
+ b0031.BaseMap.Fj32 
+
+```
+
+
+
+# Contribution and Bootstrap Ratios
+```{r, fig.height=10, fig.width= 25, include=FALSE}
+varCtr1 <- ctrK[,1]
+names(varCtr1) <- rownames(ctrK)
+a0005.Var.ctr1 <- PrettyBarPlot2(varCtr1,
+                                 main = 'Variable Contributions: Dimension 1',
+                                 ylim = c(-.05, 1.2*max(varCtr1)),
+                                 font.size = 5,
+                                 threshold = 1 / nrow(ctrK),
+                                 color4bar = gplots::col2hex(col4Var),
+                                 signifOnly = TRUE
+                                )
+
+a0005.Var.ctr1
+## contribution for dimension 2
+
+varCtr2 <- ctrK[,2]
+names(varCtr2) <- rownames(ctrK)
+a0005.Var.ctr2 <- PrettyBarPlot2(varCtr2,
+                                 main = 'Variable Contributions: Dimension 2',
+                                 ylim = c(-.05, 1.2*max(varCtr2)),
+                                 font.size = 5,
+                                 threshold = 1 / nrow(ctrK),
+                                 color4bar = gplots::col2hex(col4Var),
+                                 signifOnly = TRUE
+                                 )
+
+a0005.Var.ctr2 
+##contribution for dimension 3
+varCtr3 <- ctrK[,3]
+names(varCtr3) <- rownames(ctrK)
+a0005.Var.ctr3 <- PrettyBarPlot2(varCtr3,
+                                 main = 'Variable Contributions: Dimension 3',
+                                 ylim = c(-.05, 1.2*max(varCtr3)),
+                                 font.size = 5,
+                                 threshold = 1 / nrow(ctrK),
+                                 color4bar = gplots::col2hex(col4Var),
+                                 signifOnly = TRUE
+                                 )
+a0005.Var.ctr3
+
+#Bootstrap Barplots-------------------------------------------------------------------------------------
+
+
+## dimension 1
+c0001.Levels.BR <- PrettyBarPlot2(
+                                  resMCA.inf$Inference.Data$fj.boots$tests$boot.ratios[,1], # BR
+                                  main = 'Bootstrap Ratios for Columns : Dimension 1',
+                                  threshold = 2,
+                                  color4bar = gplots::col2hex(col4Labels),
+                                  signifOnly = TRUE
+                                  )
+
+c0001.Levels.BR #<- recordPlot()
+
+## dimension 2
+
+c0002.Levels.BR <- PrettyBarPlot2(
+  resMCA.inf$Inference.Data$fj.boots$tests$boot.ratios[,2], # BR
+  main = 'Bootstrap Ratios for Columns : Dimension 2',
+  threshold = 2,
+  color4bar = gplots::col2hex(col4Labels),
+  signifOnly = TRUE
+)
+
+c0002.Levels.BR #<- recordPlot()
+
+c0003.Levels.BR <- PrettyBarPlot2(
+  resMCA.inf$Inference.Data$fj.boots$tests$boot.ratios[,3], # BR
+  main = 'Bootstrap Ratios for Columns : Dimension 3',
+  threshold = 2,
+  color4bar = gplots::col2hex(col4Labels),
+  signifOnly = TRUE
+)
+
+c0003.Levels.BR
+
+
+
+```
+
+```{r grid_ctrJ, echo=FALSE, fig.height= 30, fig.width=40}
+
+BothCtrJ  <-gridExtra::grid.arrange(as.grob(a0005.Var.ctr1),
+                        as.grob(c0001.Levels.BR), 
+                        as.grob(a0005.Var.ctr2),
+                        as.grob(c0002.Levels.BR),
+                        as.grob(a0005.Var.ctr3),
+                        as.grob(c0003.Levels.BR),
+                        ncol = 2,nrow = 3 ,
+                        top = textGrob("Contributionbarplots",
+                        gp=gpar(fontsize=18,font=5))
+                       )
+
+BothCtrJ <- recordPlot()
+
+```
+## Conclusion
+
+Dimension 1 and 2
+
+Row: Gradation from Normal Autobiographical Memory to High Autobiographical Memory.
+Col: Questions related to Episodic memory and questions related to memory for future are significantly contributing (they lie diagonal to both the dimension- contribute almost equally).
+
+There is a non linear relationship within the levels of Episodic memory and Future memory groups.
+
+Dimension 2 and 3
+
+Row: Does not really make sense to plot since I have only two groups.
+Col: Questions related to memory for Future, Spatial memory seem to be significantly contributing towards dimension 3.
+
+```{r}
+# Here we can save all figures to a PowerPoint
+savedList <- saveGraph2pptx(file2Save.pptx = 'mCA', 
+                            title = 'All Figures', 
+                            addGraphNames = TRUE)
+
+```
